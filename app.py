@@ -35,22 +35,30 @@ with tab1:
             
 with tab2:
     st.header("バーコードスキャン")
-    camera_image = st.camera_input("バーコードを撮影してください")
-    if camera_image:
-        image = Image.open(camera_image)
-        st.image(image, caption="撮影したバーコード画像", use_column_width=True)
-        np_img = np.array(image.convert("RGB"))
+    if st.button("スキャン開始"):
+        cap = cv2.VideoCapture(0)
         detector = cv2.barcode_BarcodeDetector()
-        retval, decoded_info, decoded_type = detector.detectAndDecode(np_img)
-        if not isinstance(decoded_info, (list, tuple)):
-            decoded_info = []
-        if not isinstance(decoded_info, (list, tuple)):
-            decoded_type = []
-        if retval and decoded_info is not None and decoded_type is not None:
-            for info, btype in zip(decoded_info, decoded_type):
-                st.write(f"検出されたバーコード ({btype}): {info}")
-                if btype == "EAN13":
-                    st.write("ISBNとして検出された可能性があります。")
+        barcode_detected = False
+        result_text =""
+        frame_placeholder = st.empty()
+        # バーコードが検出されるまでループ
+        while cap.isOpened() and not barcode_detected:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            retval, decoded_info, decoded_type = detector.detectAndDecode(frame)
+            # decoded_infoがNoneまたは空文字列でなければ検出成功とみなす
+            if (retval and decoded_info is not None and len(decoded_info) > 0
+                and str(decoded_info[0]) !=""):
+                result_text = str(decoded_info[0])
+                # 結果を画像上に描画
+                cv2.putText(frame, result_text, (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+                barcode_detected = True
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame_placeholder.image(frame_rgb)
+        cap.release()
+        if barcode_detected:
+            st.success(f"検出されたバーコード: {result_text}")
         else:
-            st.write("バーコードが検出されませんでした。")
+            st.error("バーコードが検出されませんでした。")
 

@@ -3,6 +3,9 @@ from PIL import Image
 import cv2
 import numpy as np
 import pytesseract
+import requests
+import io
+
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
@@ -15,7 +18,7 @@ def preprocess_image(image):
     return thresh
 
 st.title("OCR & バーコードスキャンデモ")
-tab1, tab2 = st.tabs(["OCR", "バーコードスキャン"])
+tab1, tab2, tab3 = st.tabs(["OCR", "バーコードスキャン", "本検索"])
 
 with tab1:
     st.header("OCR")
@@ -61,4 +64,21 @@ with tab2:
             st.success(f"検出されたバーコード: {result_text}")
         else:
             st.error("バーコードが検出されませんでした。")
+with tab3:
+    st.header("本検索")
+    book_ISBN = st.text_input("本のISBN(13桁)を入力してください")
+    if st.button("検索"):
+        if len(book_ISBN) !=13 or not book_ISBN.isdigit():
+            st.error("正しい13桁のISBNを入力してください。")
+        else:
+            url = f"https://ndlsearch.ndl.go.jp/thumbnail/{book_ISBN}.jpg"
+            response = requests.get(url)
+            if response.ok:
+                try:
+                    cover_image = Image.open(io.BytesIO(response.content))
+                    st.image(cover_image, caption=f"書影 for ISBN{book_ISBN}")
+                except Exception as e:
+                    st.error("書影が見つかりませんでした")
+            else:
+                st.error("APIエラー:書影を取得できませんでした")
 

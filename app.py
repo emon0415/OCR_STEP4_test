@@ -71,14 +71,58 @@ with tab3:
         if len(book_ISBN) !=13 or not book_ISBN.isdigit():
             st.error("正しい13桁のISBNを入力してください。")
         else:
-            url = f"https://ndlsearch.ndl.go.jp/thumbnail/{book_ISBN}.jpg"
-            response = requests.get(url)
-            if response.ok:
-                try:
-                    cover_image = Image.open(io.BytesIO(response.content))
-                    st.image(cover_image, caption=f"書影 for ISBN{book_ISBN}")
-                except Exception as e:
-                    st.error("書影が見つかりませんでした")
-            else:
-                st.error("APIエラー:書影を取得できませんでした")
+            try:
+                thumb_url = f"https://ndlsearch.ndl.go.jp/thumbnail/{book_ISBN}.jpg"
+                thumb_response = requests.get(thumb_url)
+                if thumb_response.ok:
+                    try:
+                        cover_image = Image.open(io.BytesIO(thumb_response.content))
+                        st.image(cover_image, caption=f"書影 for ISBN{book_ISBN}")
+                    except Exception as e:
+                        st.error(f"書影が見つかりませんでした エラー:{e}")
+                else:
+                    st.error("サムネイル取得に失敗しました。HTTPステータス: {thumb_response.status_code}")
+            except requests.exceptions.RequestException as e:
+                st.error(f"サムネイル取得時に通信エラーが発生しました:{e}")
+            
+            st.markdown("---")
+
+            # OpenSearch API で書誌情報を取得（JSON形式）
+            try:
+                url_opensearch = f"https://ndlsearch.ndl.go.jp/api/opensearch?isbn={book_ISBN}&format=json"
+                resp_meta = requests.get(url_opensearch)
+                if resp_meta.ok:
+                    try:
+                        data = resp_meta.json()
+                    except Exception as e:
+                        st.error(f"書誌情報のJSON解析に失敗しました: {e}")
+                        st.stop()
+                    
+                    # 典型的なレスポンス例: data["@graph"][0]["items"][0] にメタデータが格納される
+                    items = data.get("@graph", [])
+                    if not items:
+                        st.warning("書誌情報が見つかりませんでした。(@graph が空)")
+                        st.stop()
+
+                    # "items"キーの中に複数書誌情報があることが多い
+                    graph0 = items[0]
+                    record_list = graph0.get("items", [])
+                    if not record_list:
+                        st.warning("書誌情報が見つかりませんでした。(items が空)")
+                        st.stop()
+                    
+                    record = record_list[0]
+                    # タイトル・著者・出版社を取得 (キーは "dc:title", "dc:creator", "dc:publisher" など)
+                    title = record.get("dc:title", "不明")
+                    creator = record.get("dc:creator", "不明")
+                    publisher = record.get("dc:publisher", "不明")
+
+                    st.subheader("書誌情報")
+                    st.write(f"**タイトル**: {title}")
+                    st.write(f"**著者**: {creator}")
+                    st.write(f"**出版社**: {publisher}")
+                else:
+                    st.error(f"書誌情報の取得に失敗しました。HTTPステータス: {resp_meta.status_code}")
+            except requests.exceptions.RequestException as e:
+                st.error(f"書誌情報取得時に通信エラーが発生しました: {e}")
 

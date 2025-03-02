@@ -38,32 +38,51 @@ with tab1:
             
 with tab2:
     st.header("バーコードスキャン")
-    if st.button("スキャン開始"):
-        cap = cv2.VideoCapture(0)
-        detector = cv2.barcode_BarcodeDetector()
-        barcode_detected = False
-        result_text =""
-        frame_placeholder = st.empty()
-        # バーコードが検出されるまでループ
-        while cap.isOpened() and not barcode_detected:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            retval, decoded_info, decoded_type = detector.detectAndDecode(frame)
-            # decoded_infoがNoneまたは空文字列でなければ検出成功とみなす
-            if (retval and decoded_info is not None and len(decoded_info) > 0
-                and str(decoded_info[0]) !=""):
+    scan_mode = st.radio("スキャンモードを選択してください", 
+                         ("リアルタイムスキャン (ローカル用)", "静止画撮影スキャン (デプロイ用)"))
+    
+    if scan_mode == "リアルタイムスキャン (ローカル用)":
+        if st.button("スキャン開始"):
+            cap = cv2.VideoCapture(0)
+            detector = cv2.barcode_BarcodeDetector()
+            barcode_detected = False
+            result_text =""
+            frame_placeholder = st.empty()
+            # バーコードが検出されるまでループ
+            while cap.isOpened() and not barcode_detected:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                retval, decoded_info, decoded_type = detector.detectAndDecode(frame)
+                # decoded_infoがNoneまたは空文字列でなければ検出成功とみなす
+                if (retval and decoded_info is not None and len(decoded_info) > 0
+                    and str(decoded_info[0]) !=""):
+                    result_text = str(decoded_info[0])
+                    # 結果を画像上に描画
+                    cv2.putText(frame, result_text, (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
+                    barcode_detected = True
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame_placeholder.image(frame_rgb)
+            cap.release()
+            if barcode_detected:
+                st.success(f"検出されたバーコード: {result_text}")
+            else:
+                st.error("バーコードが検出されませんでした。")
+    else:
+        camera_image = st.camera_input("バーコードを撮影してください (デプロイ用)")
+        if camera_image:
+            image = Image.open(camera_image)
+            st.image(image, caption="撮影した画像", use_column_width=True)
+            np_img = np.array(image.convert("RGB"))
+            detector = cv2.barcode_BarcodeDetector()
+            retval, decoded_info, decoded_type = detector.detectAndDecode(np_img)
+            if retval and decoded_info is not None and len(decoded_info) > 0 and str(decoded_info[0]) != "":
                 result_text = str(decoded_info[0])
-                # 結果を画像上に描画
-                cv2.putText(frame, result_text, (50,50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-                barcode_detected = True
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            frame_placeholder.image(frame_rgb)
-        cap.release()
-        if barcode_detected:
-            st.success(f"検出されたバーコード: {result_text}")
-        else:
-            st.error("バーコードが検出されませんでした。")
+                st.success(f"検出されたバーコード: {result_text}")
+            else:
+                st.error("バーコードが検出されませんでした。")
+
+
 with tab3:
     st.header("本検索")
     book_ISBN = st.text_input("本のISBN(13桁)を入力してください")

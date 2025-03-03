@@ -5,6 +5,7 @@ import numpy as np
 import pytesseract
 import requests
 import io
+import xml.etree.ElementTree as ET
 
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
@@ -90,6 +91,7 @@ with tab3:
         if len(book_ISBN) !=13 or not book_ISBN.isdigit():
             st.error("正しい13桁のISBNを入力してください。")
         else:
+            # --- サムネイル画像取得 ---
             try:
                 thumb_url = f"https://ndlsearch.ndl.go.jp/thumbnail/{book_ISBN}.jpg"
                 thumb_response = requests.get(thumb_url)
@@ -106,40 +108,49 @@ with tab3:
             
             st.markdown("---")
 
-            # OpenSearch API で書誌情報を取得（JSON形式）
+            # OpenSearch API で書誌情報を取得（XML形式）
             try:
                 url_opensearch = f"https://ndlsearch.ndl.go.jp/api/opensearch?isbn={book_ISBN}&format=json"
                 resp_meta = requests.get(url_opensearch)
                 if resp_meta.ok:
-                    try:
-                        data = resp_meta.json()
-                    except Exception as e:
-                        st.error(f"書誌情報のJSON解析に失敗しました: {e}")
-                        st.stop()
+                    if not resp_meta.text.strip():
+                        st.warning("書誌情報のレスポンスが空です。対象のISBNに該当する情報が存在しない可能性があります。")
+                    else:
+                        try:
+                            root = ET.fromstring(resp_meta.text)
+                        except Exception as e:
+                            st.error(f"書誌情報のJSON解析に失敗しました: {e}")
+                            st.stop()
                     
-                    # 典型的なレスポンス例: data["@graph"][0]["items"][0] にメタデータが格納される
-                    items = data.get("@graph", [])
-                    if not items:
-                        st.warning("書誌情報が見つかりませんでした。(@graph が空)")
+                    channel = root.find('channel')
+                    if channel is None:
+                        st.warning("書誌情報が見つかりませんでした。(channel が見つからない)")
+                        st.stop()
+                    item = channel.find('item')
+                    if item is None:
+                        st.warning("書誌情報が見つかりませんでした。(item が見つからない)")
                         st.stop()
 
-                    # "items"キーの中に複数書誌情報があることが多い
-                    graph0 = items[0]
-                    record_list = graph0.get("items", [])
-                    if not record_list:
-                        st.warning("書誌情報が見つかりませんでした。(items が空)")
-                        st.stop()
-                    
-                    record = record_list[0]
-                    # タイトル・著者・出版社を取得 (キーは "dc:title", "dc:creator", "dc:publisher" など)
-                    title = record.get("dc:title", "不明")
-                    creator = record.get("dc:creator", "不明")
-                    publisher = record.get("dc:publisher", "不明")
+                    title = None
+                    creator =None
+                    pub_date = None
+                    price = None
+                    for child in item:
+                        tag = child.tag
+                        if tag.endswith('title') and title is None:
+                            title = child.text
+                        elif tag.endswith('creator') and creator is None:
+                            creator = child.text
+                        elif tag.endswith('date') and pub_date is None:
+                            pub_date = child.text
+                        elif tag.endswith('price') and price is None:
+                            price = child.text
 
                     st.subheader("書誌情報")
-                    st.write(f"**タイトル**: {title}")
-                    st.write(f"**著者**: {creator}")
-                    st.write(f"**出版社**: {publisher}")
+                    st.write(f"**タイトル**: {title if title else '不明'}")
+                    st.write(f"**著者**: {creator if creator else '不明'}")
+                    st.write(f"**出版社**: {pub_date if pub_date else '不明'}")
+                    st.write(f"**価格**: {price if price else '不明'}")
                 else:
                     st.error(f"書誌情報の取得に失敗しました。HTTPステータス: {resp_meta.status_code}")
             except requests.exceptions.RequestException as e:

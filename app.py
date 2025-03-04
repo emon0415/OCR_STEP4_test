@@ -7,9 +7,11 @@ import requests
 import io
 import xml.etree.ElementTree as ET
 import speech_recognition as sr
+from pydub import AudioSegment
 
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+AudioSegment.converter = r"C:\ffmpeg-master-latest-win64-gpl-shared\bin\ffmpeg.exe"
 
 def preprocess_image(image):
     img = np.array(image.convert('RGB'))
@@ -158,12 +160,15 @@ with tab3:
                 st.error(f"書誌情報取得時に通信エラーが発生しました: {e}")
 
 with tab4:
+    st.header('文字起こし')
     set_language_list = {
     '日本語' : 'ja',
     '英語' : 'en-US',
     }
 
-    set_language = '日本語'
+    set_language = st.selectbox('音声認識する言語を選んでください。', list(set_language_list.keys()))
+    current_language_state = st.empty()
+    current_language_state.write('選択中の言語:' + set_language)
 
     def file_speech_to_text(audio_file,set_language):
         with sr.AudioFile(audio_file) as source:
@@ -174,37 +179,34 @@ with tab4:
         except:
             text = '音声認識に失敗しました'
         return text
-
-    def mic_speech_to_text(set_language):
-        with sr.Microphone() as source:
-            audio = sr.Recognizer().listen(source)
-        try:
-            text= sr.Recognizer().recognize_google(audio, language=set_language_list[set_language])
-        except:
-            text = '音声認識に失敗しました'
-        return text
-
-
-    st.title('文字起こしアプリ')
-    st.write('音声認識する言語を選んでください')
-    set_language = st.selectbox('音声認識する言語を選んでください。', set_language_list.keys())
-    current_language_state = st.empty()
-    current_language_state.write('選択中の言語:' + set_language)
-
+    
+    # ファイルアップロードによる音声認識
     file_upload =st.file_uploader('ここに音声認識したファイルをアップロードしてください。', type=['wav'])
-
-    if (file_upload != None):
+    if file_upload is not None:
         st.write('音声認識結果:')
         result_text = file_speech_to_text(file_upload, set_language)
         st.write(result_text)
         st.audio(file_upload)
-
+   
     st.write('マイクでの音声認識はこちらのボタンから')
-
     if st.button('音声認識開始'):
         state = st.empty()
         state.write('音声認識中')
-        result_text = mic_speech_to_text(set_language)
-        state.write('音声認識結果：')
-        st.write(result_text)
+        recognizer = sr.Recognizer()
+        with sr.Microphone() as source:
+            audio = recognizer.listen(source)
+        try:
+            recognized_text = recognizer.recognize_google(audio, language=set_language_list[set_language])
+        except Exception as e:
+            recognized_text = f'音声認識に失敗しました:{e}'
+        state.write('音声認識結果:')
+        st.write(recognized_text)
+        # 録音した音声を WAV データとして取得し、MP3 に変換
+        wav_data = audio.get_wav_data()
+        mp3_io = io.BytesIO()
+        audio_segment = AudioSegment.from_wav(io.BytesIO(wav_data))
+        audio_segment.export(mp3_io, format="mp3")
+        mp3_io.seek(0)
+        st.download_button("録音をMP3としてダウンロード", data=mp3_io, file_name="recorded.mp3", mime="audio/mpeg")
+
 

@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
 from PIL import Image
 import cv2
 import numpy as np
@@ -7,8 +8,8 @@ import requests
 import io
 import xml.etree.ElementTree as ET
 import speech_recognition as sr
-from pydub import AudioSegment
-
+from pydub import AudioSegment # 音声
+import av
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 AudioSegment.converter = r"C:\ffmpeg-master-latest-win64-gpl-shared\bin\ffmpeg.exe"
@@ -25,7 +26,7 @@ st.title("OCR & バーコードスキャンデモ")
 tab1, tab2, tab3, tab4 = st.tabs(["OCR", "バーコードスキャン", "本検索", "音声入力"])
 
 with tab1:
-    st.header("OCR")
+    st.header("文字読み取り")
     uploaded_files = st.file_uploader("画像ファイルを選択してください", type=["png", "jpg", "jpeg", "bmp", "tiff"], accept_multiple_files=True)
 
     if uploaded_files:
@@ -160,7 +161,7 @@ with tab3:
                 st.error(f"書誌情報取得時に通信エラーが発生しました: {e}")
 
 with tab4:
-    st.header('文字起こし')
+    st.header('音声認識（アップロードorマイク）')
     set_language_list = {
     '日本語' : 'ja',
     '英語' : 'en-US',
@@ -209,4 +210,70 @@ with tab4:
         mp3_io.seek(0)
         st.download_button("録音をMP3としてダウンロード", data=mp3_io, file_name="recorded.mp3", mime="audio/mpeg")
 
+    st.markdown("---")
+    st.subheader("WebRTC を使ったリアルタイム録音（デプロイ環境向け）")
+    st.write("下のボタンを押すと、ブラウザ経由でリアルタイムに音声をキャプチャします。録音終了後、MP3としてダウンロードできます。")
 
+    class AudioBufferProcessor(AudioProcessorBase):
+        def __init__(self):
+            self.frames = []
+        def process(self, frame: av.AudioFrame) -> av.AudioFrame:
+            self.frames.append(frame.to_ndarray())
+            return frame
+
+    def main():
+        st.title("音声録音デモ (音声のみ)")
+
+        # 録音中かどうかを session_state で管理
+        if "is_recording" not in st.session_state:
+            st.session_state["is_recording"] = False
+
+        # 録音開始前
+        if not st.session_state["is_recording"]:
+            if st.button("録音開始"):
+                st.session_state["is_recording"] = True
+        else:
+            st.info("録音中... 「録音停止」ボタンを押してください。")
+
+            webrtc_ctx = webrtc_streamer(
+                key="audio",
+                mode=WebRtcMode.SENDONLY,
+                audio_processor_factory=AudioBufferProcessor,
+                video_processor_factory=None,
+                media_stream_constraints={"audio": True, "video": False},
+            )
+
+            if st.button("録音停止"):
+                st.session_state["is_recording"] = False
+                if webrtc_ctx and webrtc_ctx.state.playing:
+                    # 録音したフレームを結合して MP3 に変換
+                    processor = webrtc_ctx.audio_processor
+                    if processor and len(processor.frames) > 0:
+                        combined = np.concatenate(processor.frames, axis=0)
+                        wav_data = combined.tobytes()
+
+                        # サンプルレート 48000 Hz, チャンネル数 1, サンプル幅 2(16bit)
+                        segment = AudioSegment(
+                            data=wav_data,
+                            sample_width=2,
+                            frame_rate=48000,
+                            channels=1
+                        )
+                        mp3_io = io.BytesIO()
+                        segment.export(mp3_io, format="mp3")
+                        mp3_io.seek(0)
+                        st.download_button(
+                            "録音データ(MP3)をダウンロード",
+                            data=mp3_io,
+                            file_name="recorded.mp3",
+                            mime="audio/mpeg"
+                        )
+                    else:
+                        st.warning("録音データがありませんでした。")
+
+                # ストリーミングを停止する
+                if webrtc_ctx:
+                    webrtc_ctx.stop()
+
+    if __name__ == "__main__":
+        main()

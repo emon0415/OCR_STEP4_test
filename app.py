@@ -161,7 +161,7 @@ with tab3:
                 st.error(f"書誌情報取得時に通信エラーが発生しました: {e}")
 
 with tab4:
-    st.header('音声認識（アップロードorマイク）')
+    st.header('音声認識（アップロードorマイク）Localのみ')
     set_language_list = {
     '日本語' : 'ja',
     '英語' : 'en-US',

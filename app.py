@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 import speech_recognition as sr
 from pydub import AudioSegment # 音声
 import av
+import base64 # Base64でのバイナリ化
 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 AudioSegment.converter = r"C:\ffmpeg-master-latest-win64-gpl-shared\bin\ffmpeg.exe"
@@ -210,6 +211,12 @@ with tab4:
         mp3_io.seek(0)
         st.download_button("録音をMP3としてダウンロード", data=mp3_io, file_name="recorded.mp3", mime="audio/mpeg")
 
+        # MP3 のバイナリデータを Base64 文字列に変換して表示
+        mp3_io.seek(0)
+        mp3_data = mp3_io.read()
+        mp3_base64 = base64.b64encode(mp3_data).decode('utf-8')
+        st.text_area("MP3のBase64文字列", mp3_base64, height=200)
+
     st.markdown("---")
     st.subheader("WebRTC を使ったリアルタイム録音（デプロイ環境向け）")
     st.write("下のボタンを押すと、ブラウザ経由でリアルタイムに音声をキャプチャします。録音終了後、MP3としてダウンロードできます。")
@@ -241,6 +248,9 @@ with tab4:
                 audio_processor_factory=AudioBufferProcessor,
                 video_processor_factory=None,
                 media_stream_constraints={"audio": True, "video": False},
+                rtc_configuration={  # peer同士でWebRTC接続するには、グローバルネットワークにあるSTUNサーバ問い合わせが必要
+                    "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+                }
             )
 
             if st.button("録音停止"):

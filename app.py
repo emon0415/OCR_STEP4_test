@@ -23,7 +23,7 @@ def preprocess_image(image):
     _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
     return thresh
 
-st.title("OCR & バーコードスキャンデモ")
+st.title("STEP4機能検証")
 tab1, tab2, tab3, tab4 = st.tabs(["OCR", "バーコードスキャン", "本検索", "音声入力"])
 
 with tab1:
